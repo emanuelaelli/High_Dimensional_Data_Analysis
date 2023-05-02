@@ -1,43 +1,22 @@
 <p align="center">
   <img src="https://github.com/emanuelaelli/Text_Mining/blob/main/Images/Hate-speech-Facebook-takes-down-post-calling-for-deporting-criminal-illegal-immigrants-750x450.jpg" width="60%">
 </p>
-  <h6 align="center">a Text Mining Project</h6>
+  <h6 align="center"> Handling Missing Data, a High Dimensional Data Analysis Project</h6>
 <p align="center">
-  <a href="#tools">Tools &nbsp;</a> |
   <a href="#overview">Overview &nbsp;</a> |
-  <a href="#data">&nbsp; Data &nbsp;</a> |
   <a href="#presentation">&nbsp; Presentation &nbsp;</a> |
   <a href="#aboutus">&nbsp; About us &nbsp;</a>
 </p>
 
-<a name="tools"></a>
-## &#9741; &nbsp; Tools
-numpy == 1.21.6   |
-pandas == 1.3.5  |
-seaborn == 0.11.2  |
-dask == 2022.02.01  |
-re == 2.2.1  |
-bs4 == 4.6.3  |
-nltk == 3.7  |
-sklearn == 1.0.2  |
-imblearn == 0.8.1  |
-xgboost == 0.90  |
-matplotlib == 3.2.2  |
-gensim == 4.2 (classification) 3.6.0 (clustering)
-
 <a name="overview"></a>
 ## &#9741; &nbsp; Overview
-University project aimed at studying the Hate Speech and Offensive Language dataset, consisting of tweets containing statements of incitement to hatred, offensive language or neutral comments, in order to perform text classification and clustering tasks.
-
-<a name="data"></a>
-## &#9741; &nbsp; Data
-The dataset is built on information gathered about CrowdFlower users, a platform for data enrichment with access to an online, on-demand workforce of millions of people who complete tasks that algorithms can’t alone.
-You can find the dataset used in the <a href="https://github.com/emanuelaelli/Text_Mining/blob/main/Dataset/labeled_data.csv">Dataset</a> folder.<br>
+Missing values are common occurrences in the data. Unfortunately, most predictive modeling techniques cannot handle missing values. Therefore, this problem must be solved before modeling.
+This university project focuses on understanding how to handle missing data in different contexts, building on the handbook 
+<a href="http://www.feat.engineering/handling-missing-data.html"><i>Feature Engineering and Selection: A Practical Approach for Predictive Models</i></a>.
 
 <a name="presentation"></a>
 ## &#9741; &nbsp; Presentation 
 You can find our presentation in the <a href="https://github.com/emanuelaelli/High_Dimensional_Data_Analysis/blob/main/Elli_Fasani_Madon_Report.pdf">Report</a> and <a href="https://github.com/emanuelaelli/Text_Mining/blob/main/Presentation.pdf">Slides</a> folder.<br>
-
 
 <a name="aboutus"></a>
 ## &#9741; &nbsp; About us
