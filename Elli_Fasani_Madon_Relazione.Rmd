@@ -1,0 +1,559 @@
+---
+title: "8 - Handling Missing Data"
+subtitle: "Feature Engineering and Selection: A Practical Approach for Predictive Models"
+author: "Emanuela Elli (892901), Alessandro Fasani (837301), Federica Madon (825628)"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Librerie utilizzate
+
+```{r message=FALSE, warning=FALSE}
+# Caricamento delle librerie e delle funzioni utili
+library(RCurl)
+library(caret)
+library(tidyverse)
+library(naniar)
+library(visdat)
+library(knitr)
+require(skimr)
+library(ComplexHeatmap)
+library(rpart)
+library(partykit)
+library(tidymodels)
+library(gridExtra)
+library(lubridate)
+library(ggiraph)
+library(heatmaply)
+library(RColorBrewer)
+library(scales)
+library(ipred)
+library(recipes)
+
+l10_breaks <- scales::trans_breaks("log10", function(x) 10^x)
+l10_labels <- scales::trans_format("log10", scales::math_format(10^.x))
+```
+
+Tra tutte le librerie utilizzate quelle più importanti sono:
+
+* `nanir` è un pacchetto molto utile per visualizzare e gestire i dati mancanti in R;
+* `caret` (dal libro Kuhn, Johnson, 2013, Applied Predictive Modelling Springer), trattata anche durante il corso la lezione inerente alla regressione non parametrica e che contiene funzioni utili nel processo di modellazione predittiva;
+* `rpart`, libreria di machine learning utilizzata per creare alberi di classificazione e regressione;
+* `partykit`, toolkit flessibile per l'apprendimento, la rappresentazione, il riepilogo e la visualizzazione di un'ampia gamma di modelli di classificazione e regressione strutturati ad albero;
+* Il pacchetto `recipes` prepara i dati per la modellazione;
+* `ipred` è una libreria che contiene funzioni per migliorare i modelli predittivi mediante la classificazione indiretta e il bagging per problemi di classificazione, regressione e sopravvivenza nonché stimatori basati sul ricampionamento dell'errore di previsione.
+
+# Datasets utilizzati
+I datasets utilizzati si possono trovare al seguente link: [https://github.com/topepo/FES/tree/master/Data_Sets/Chicago_trains](https://github.com/topepo/FES/tree/master/Data_Sets/Chicago_trains).
+
+```{r}
+#Load dei dataset necessari
+data(scat)
+load("C:/Users/madon/OneDrive/Desktop/Hdda/chicago.RData")
+load("C:/Users/madon/OneDrive/Desktop/Hdda/chicago_raw_entries.RData")
+load("C:/Users/madon/OneDrive/Desktop/Hdda/stations.RData")
+```
+
+Per le visualizzazioni verranno utilizzati due fonti di dati: *Scat data* e *Chicago Train Ridership data*. *Scat data* è un dataset contenuto nel pacchetto `caret` e conta 110 osservazioni circa test di laboratorio e morfologici su campioni di escrementi di animali trovati in natura. L'obiettivo alla base della raccolta era focalizzato sul trovare una corrispondenza tra le misure relative ai predittori e la specie che ha prodotto l'escremento (preventivamente classificato tramite il genotipo nel DNA). Di quelle 110 osservazioni, 19 presentano uno o più valori mancanti. La raccolta di datasets di *Chicago Train Ridership* contiene 3 dataset di nostro interesse. Uno di questi, `raw_entries`, riporta il numero (indicato in migliaia) di passeggeri presenti in 5.733 giorni (osservazioni) e lungo 137 stazioni (predittori). Queste sono state ottenute misurando il numero di ingressi in una stazione in tutti i tornelli. I valori variano tra 0 e 36.323 al giorno. Le stazioni, nonché predittori di interesse, sono state tutte codificate tramite un id univoco. Per questa ragione è stato utilizzato anche il dataset `stations` al fine di assegnare a ciascun id il nome proprio della stazione che rappresenta.
+
+```{r}
+head(scat[, c("Species", "Length", "Diameter", "Taper", "TI","Mass","d13C", 
+              "d15N", "CN", "flat")])
+```
+
+```{r}
+Range = function(x) {
+  a = range(x, na.rm = TRUE)
+  a[2]-a[1]
+}
+
+
+PerSkim = skim_with(numeric = sfl(hist = NULL, sd = NULL, p25 = NULL, 
+                                  p50 = NULL, p75 = NULL, range = Range))
+PerSkim(scat[, c("Species", "Length", "Diameter", "Taper", "TI","Mass","d13C", 
+                 "d15N", "CN", "flat")])
+```
+
+Di seguito il dataset `raw_missing`:
+
+```{r}
+head(raw_entries[, c(1:10)])
+```
+
+```{r}
+with.NaN = vapply(raw_entries[, -1], function(x) sum(is.na(x)) > 0, logical(1))
+with.NaN.names = names(which(with.NaN==TRUE))
+
+PerSkim(raw_entries[, c(with.NaN.names)])
+```
+
+# Comprendere la natura e la gravità delle informazioni mancanti
+Per i successivi 3 esempi di visualizzazioni verrà utilizzato il dataset *Scat Data*.
+\
+\
+Creiamo un dataset binario codificando con 0 i valori mancanti e con 1 tutti gli altri valori possibili:
+
+```{r}
+convert_missing <- function(x) ifelse(is.na(x), 0, 1)
+scat_missing <- apply(scat, 2, convert_missing)
+```
+
+## Heatmaps
+Le *Heatmaps* sono un ottimo modo per visualizzare la natura delle informazioni mancanti quando i datasets sono di dimensioni ridotte. Si procede distinguendo binariamente tutti i valori del dataset a seconda che siano presenti valori NA o meno.
+
+```{r}
+Heatmap(
+  scat_missing, 
+  name = "Missing", #title of legend
+  column_title = "Predictors", row_title = "Samples",
+  col = c("black","lightgrey"),
+  show_heatmap_legend = FALSE,
+  row_names_gp = gpar(fontsize = 0) # Text size for row names
+)
+```
+
+I dendrogrammi alle estremità dell'heatmap visualizzano in ordine decrescente di intensità, la presenza di missing values tra le covariate (asse X) e tra le singole osservazioni (asse Y), posizionandole vicine tra loro ed in ordine:
+
+* Decrescente da destra a sinistra le covariate con più osservazioni mancanti; 
+* Decrescente dal basso verso l'alto le osservazioni con più variabili mancanti. 
+
+Nativamente l'heatmap riordina secondo un algoritmo di clustering per similarità.
+
+## Co-occurence plot
+Il *Co-occurence plot* si focalizza sui predittori mancanti, evidenziando quali di questi e quante volte mancano congiuntamente tra le osservazioni del campione.
+
+```{r}
+gg_miss_upset(scat, nsets = 7) 
+```
+
+La funzione `gg_miss_upset()` del pacchetto `nanir` mostra un co-occurence plot dei predittori e il numero di osservazioni che presentano queste combinazioni di predittori mancanti, utilizzando rispettivamente una sintesi grafica di queste variabili e un grafico a barre.
+
+## Scatterplot
+Gli *scatterplot* possono essere un ottimo modo per visualizzare le relazioni tra i dati e i valori mancanti. In particolare, può essere analizzata l'interazione dei valori mancanti tra due variabili numeriche, alla luce di una terza variabile categorica (binaria in questo caso).
+
+```{r message=FALSE, warning=FALSE}
+scat_flat = mutate(scat, flat = ifelse(flat == 1, "yes", "no"))  
+
+ggplot(scat_flat, aes(col = flat)) + 
+  geom_point(aes(x = Diameter, y = Mass), alpha = .5) + 
+  geom_rug(data = scat_flat[is.na(scat_flat$Mass),], 
+           aes(x = Diameter), 
+           sides = "b", 
+           lwd = 1) + 
+  geom_rug(data = scat_flat[is.na(scat_flat$Diameter),], 
+           aes(y = Mass), 
+           sides = "l", 
+           lwd = 1) + 
+  theme(legend.position = "top")
+```
+
+Dopo aver mutato la variabile `flat` in binaria `yes-->1`, `no-->0` vengono utilizzate diverse funzioni della libreria `ggplot2`. La funzione `ggplot()` per inizializzare lo scatterplot di base di `ggplot2` e differenziare per colore la variabile binaria `flat`, `geom_point()` per i singoli punti/osservazioni, `geom_rug` per evidenziare con delle linee più marcate la presenza di missing values sui due assi cartesiani.
+\
+\
+Quando il numero di osservazioni e/o predittori non è più contenuto in poche centinaia, le precedenti visualizzazioni risultano di difficile comprensione e non permettono di individuare eventuali pattern presenti nei dati.
+
+## PCA
+Per i successivi 3 esempi di visualizzazioni e per le tabelle di sintesi verrà utilizzato il dataset *Chicago train ridership*.
+\
+\
+La *Principal Component Analysis* è una tecnica di riduzione della dimensionalità che può risultare molto utile per visualizzare nel complesso il dataset e i predittori con valori mancanti. Lo scopo della PCA è individuare le direzioni con i massimi valori di variabilità e individuare il numero di pattern presenti tra i dati mancanti.
+\
+Nel successivo plot sarà focalizzata l'attenzione sulle osservazioni.
+
+```{r}
+only_rides = dplyr::select(raw_entries, -date)
+
+date_missing = apply(only_rides, 2, convert_missing)
+
+#Vector containing the % of missing values for each observation (5733)
+date_missing_ppn = apply(only_rides, MARGIN = 1, function(x) sum(is.na(x)))/ncol(only_rides)
+
+#PCA
+pca_dates <- prcomp(date_missing)
+
+pca_d =  
+  data.frame(pca_dates$x) %>%
+  dplyr::select(PC1, PC2) %>%
+  mutate(Percent = date_missing_ppn * 100) %>% 
+  dplyr::distinct(PC1, PC2, Percent)
+
+pca_d_rng <- extendrange(c(pca_d$PC1, pca_d$PC2))
+
+ggplot(pca_d, aes(x = PC1, y = PC2, size = Percent)) +
+  geom_point(alpha = .5, col = "#1B9E77") +
+  xlim(pca_d_rng) + 
+  ylim(pca_d_rng) + 
+  scale_size(limits = c(0, 10), range = c(.5, 10))
+```
+
+Dalla tabella delle `raw_entities` selezioniamo solo le colonne relative alle stazioni utilizzando la funzione `select()` e da questa creiamo una nuova tabella `date_missing` codificando binariamente tra valore presente e valore assente, usando la funzione precedentemente creata `convert_missing()`.
+Creiamo un vettore `date_missing_ppn` contenente la proporzione di missing values per ciascuna delle 5733 osservazioni, rispetto al totale dei predittori. 
+Applichiamo la PCA alla tabella con valori binari, tramite la funzione `prcomp()`, per ottenere un oggetto contenente *Eigenvalues* e *Eigenvectors*. Da questo oggetto selezioniamo le prime due componenti, PC1 e PC2 e aggiungiamo alla tabella creata una nuova colonna `Percent` contenente le % di missing values per ogni osservazione, utilizzando la funzione `mutate()`. Salviamo in una variabile `pca_d_rng` i valori dei range di dati delle due componenti PC1 e PC2, estesi di una piccola percentuale, per ottenere un plot migliore visualizzando tutti i punti. 
+Come ultima fase viene stampato tutto con la funzione `ggplot()` evidenziando le due componenti delle PCA sui due assi cartesiani e le dimensioni dei pattern (sfruttando la colonna `Percent` appena creata) riscontrati tra le osservazioni.
+\
+\
+Nel successivo plot, sempre relativo alla PCA, sarà focalizzata l'attenzione sui predittori.
+
+```{r message=FALSE, warning=FALSE}
+cols_missing <- 
+  only_rides %>% 
+  summarise_all(list(~ sum(is.na(.)))) %>%
+  mutate_all(funs(ppn = ./nrow(only_rides))) %>% 
+  dplyr::select(ends_with("ppn")) %>% 
+  gather(key = "station_label", value = ppn) %>%     
+  mutate(station_label = gsub("_ppn", "", station_label))
+
+#PCA 
+pca_stations <- prcomp(t(date_missing))
+
+pca_s <- 
+  data.frame(pca_stations$x) %>%
+  dplyr::select(PC1, PC2) %>%
+  bind_cols(cols_missing) %>%
+  mutate(Percent = ppn * 100) %>%
+  dplyr::distinct(PC1, PC2, Percent, ppn)
+
+pca_s_rng <- extendrange(c(pca_s$PC1, pca_s$PC2))
+
+
+ggplot(pca_s, aes(x = PC1, y = PC2, size = Percent)) +
+  geom_point(alpha = .5, col = "#D95F02") +
+  xlim(pca_s_rng) + 
+  ylim(pca_s_rng) + 
+  scale_size_continuous(limits = c(0, 100), range = c(3, 10))
+```
+
+Dalla tabella `only_rides` creiamo una nuova tabella `cols_missing` contenente le proporzioni di valori mancanti per ogni colonna/stazione ferroviaria. Per la sua costruzione sono stati contati tutti i valori NaN perciascuna colonna, con la funzione `summarise_all()`, per poi essere mutati in proporzione rispetto al numero di righe/osservazioni tramite la funzione `mutate_all()`.
+Successivamente applichiamo la PCA alla trasposta della tabella `date_missing` con valori binari, tramite la funzione `prcomp()`, per ottenere un oggetto contenente *Eigenvalues* e *Eigenvectors*. Da questo oggetto selezioniamo le prime due componenti, PC1 e PC2 e aggiungiamo alla tabella creata una nuova colonna `Percent` contenente le % di missing values per ogni covariata/stazione, utilizzando la funzione `mutate()`. Salviamo in una variabile `pca_s_rng` i valori dei range di dati delle due componenti PC1 e PC2, estesi di una piccola percentuale, per ottenere un plot migliore visualizzando tutti i punti. 
+Come ultima fase viene stampato tutto con la funzione `ggplot()` evidenziando le due componenti delle PCA sui due assi cartesiani e le dimensioni dei pattern (sfruttando la colonna `Percent` appena creata) riscontrati tra le covariate/stazioni.
+
+## Missing data patterns
+Per avere un ulteriore comprensione di come la PCA individua dei pattern, può essere utile visualizzare una rappresentazione dei missing values delle stazioni (ordinate con algoritmi di clustering per distanza) e dei giorni (ordinati cronologicamente).
+
+```{r}
+miss_entries <- 
+  raw_entries %>%
+  dplyr::select(-date) %>%
+  is.na() 
+
+miss_num <- apply(miss_entries, 2, sum)  
+
+has_missing <- vapply(raw_entries[, -1], function(x) sum(is.na(x)) > 1, logical(1)) 
+miss_station <- names(has_missing)[has_missing]  
+
+
+#Clustering on just the station data (not time) and get a reordering of the stations for plotting
+miss_data <- 
+  raw_entries[, miss_station] %>%   
+  is.na()
+
+clst <- hclust(dist(t(miss_data)))  
+clst_stations <- tibble(            
+    station_id = colnames(miss_data),
+    order = clst$order)
+
+
+station_names <- 
+  stations %>%   
+  dplyr::select(name, station_id) %>%
+  right_join(clst_stations, by = "station_id")   
+
+station_lvl <- station_names[["name"]][station_names$order]
+
+miss_vert <-
+  raw_entries %>%
+  gather(station_id, raw_entries, -date) %>%  
+  filter(station_id %in% miss_station) %>%   
+  mutate(status = ifelse(is.na(raw_entries), "missing", "complete")) %>%  
+  full_join(station_names, by = "station_id") %>% 
+  mutate(     
+    name = factor(name, levels = station_lvl),
+    status = factor(status, levels = c("missing", "complete"))
+  )
+
+
+ggplot(miss_vert, aes(x = date, y = name, fill = status)) + 
+  geom_tile() + 
+  ylab("") + xlab("") + 
+  scale_fill_grey()
+```
+
+Tramite la funzione `vapply()` creiamo un vettore `has_missing` contenente `TRUE` o `FALSE` a seconda che ci siano o meno 2 o più valori mancanti, poi associamo ad una variabile `miss_station` solo quelle `TRUE` (15 in totale) tenendo solo i rispettivi `id_stazione`.
+Dopo aver creato la tabella `miss_data` con le sole colonne che presentavano due o più valori missing, si procede creando una tabella contenente gli id delle 15 stazioni ed un numero di ordine assegnato da un algoritmo di clustering gerarchico per distanza, fornito dalla funzione `hclust()` del pacchetto `stats`. Dopo aver creato una tabella `station_names`, contenente i nomi propri delle stazioni (right join sul dataset stations), si procede creando un ulteriore tabella `miss_vert` ordinando tutte le osservazioni raccolte, e relative alle sole stazioni del dataset `miss_station`, secondo l'ordine fornitoci dall'algoritmo di clustering. Il tutto viene poi plottato con la funzione `ggplot()`.
+
+## Misure di sintesi
+Le misure di sintesi sono un altro valido strumento per comprendere la gravità dei missing data tra osservazioni e predittori. Tra le più semplici si annoverano le frequenze relative % di missing values nei predittori e le frequenze relative % di missing values nelle singole osservazioni (raggruppate per range o per medesima percentuale di missing values).
+\
+\
+Percentuale di dati mancanti per i predittori:
+
+```{r}
+summary_variabili = miss_var_summary(as.data.frame(scat))
+summary_variabili$pct_miss = round(summary_variabili$pct_miss, digits = 1)
+summary_variabili_grouped = group_by(summary_variabili, pct_miss)
+svg_final = as.data.frame(attr(summary_variabili_grouped, "groups"))
+colnames(svg_final) = c("% Dati mancanti", "id Feature")
+svg_final=  kable(svg_final)
+svg_final
+```
+
+Utilizzando la funzione `miss_var_summary()` creiamo una tabella di sintesi per ogni predittore circa la percentuale di osservazioni mancanti che presenta. Con la funzione `group_by(`) raggruppiamo insieme i predittori che presentano la stessa percentuale di osservazioni mancanti ed infine estraiamo dagli attributi della variabile `summary_variabili_grouped` appena creata, la tabella `grouped`, utilizzando la funzione `attr()`.
+\
+\
+Percentuale di dati mancanti per le osservazioni:
+
+```{r}
+summary_oss = miss_case_summary(as.data.frame(scat))
+summary_oss$pct_miss = round(summary_oss$pct_miss, digits = 1)
+summary_oss_grouped = group_by(summary_oss, pct_miss)
+svo_final= as.data.frame(attr(summary_oss_grouped, "groups"))
+colnames(svo_final) = c("% Dati mancanti", "id Osservazione")
+svo_final = kable(svo_final)
+svo_final
+```
+
+Utilizzando la funzione `miss_case_summary()` creiamo una tabella di sintesi per ogni osservazione circa la % di predittori mancanti che presenta. Con la funzione `group_by()` raggruppiamo insieme le osservazioni che presentano la stessa % di predittori mancanti ed infine estraiamo dagli attributi della variabile `summary_oss_grouped` appena creata, la tabella `grouped`, utilizzando la funzione `attr()`.
+
+# Modelli "resistenti" ai valori mancanti
+Nella seguente visualizzazione viene mostrato un albero di partizionamento ricorsivo per i dati relativi agli escrementi di animali (precedentemente già introdotti).
+\
+Per costruire l'albero di decisione secondo il modello CART viene utilizzata la funzione `rpart()` in cui si specifica che la variabile target da prevedere è `Species` e le variabili esplicative con cui si vuole effettuare tale previsione sono tutte le variabili presenti all'interno del dataset (indicato col simbolo `.`).
+\
+Dopodiché si procede alla conversione in un oggetto `party` con la funzione `as.party()` dal pacchetto `partykit`.
+
+```{r}
+rpart_mod <- rpart(Species ~ ., data=scat)
+rpart_party <- as.party(rpart_mod)
+plot(rpart_party, tp_args = list(text = "vertical", ymax = 1.5))
+```
+
+Come viene mostrato di seguito, è possibile notare come i tre predittori utilizzati all'interno dell'albero di decisione (`CN`, `d13C`, `Mass`) contengono valori mancanti all'interno del dataset.
+
+```{r}
+colSums(is.na(scat))
+```
+
+Nel modello CART questo non risulta essere una problematica poichè quando si verifica la presenza di valori mancanti nei predittori vengono utilizzati in egual modo dei predittori surrogati (*surrogate splits*).
+\
+Pertanto per ogni divisione, vengono valutate una varietà di alternative e vengono considerate tali le suddivisioni i cui risultati sono simili alla suddivisione originale effettivamente utilizzata nell'albero. Se una suddivisione surrogata si avvicina bene alla suddivisione originale, può essere utilizzata quando i dati del predittore associati alla suddivisione originale non sono disponibili. Per cui fondamentalmente non solo viene memorizzato lo split migliore (chiamato split primario) ma anche diverse divisioni surrogate per ogni divisione primaria nell'albero.
+\
+È importante capire come andare a gestire i valori nulli all'interno degli alberi decisionali poichè, come abbiamo visto durante il corso, questa tipologia di modelli sono altamente instabili ovvero se durante la classificazione o regressione cambia il metodo di splitting, questo verrà propagato a tutto l'albero cambiando la variabilità di questo.
+\
+Attraverso il `summary` è possibile esaminare i predittori utilizzati nell'albero (compreso i predittori surrogati) e la loro relativa importanza nella previsione, come mostrato di seguito.
+
+```{r}
+summary(rpart_mod)
+```
+
+Si identifica quindi che la ripartizione iniziale si basa sul rapporto carbonio/azoto (`CN < 8,7`) ma quando un campione ha un valore mancante per la variabile `CN`, il modello CART utilizza una suddivisione alternativa `flat` (indicatore che denota se gli escrementi sono di forma piatta o meno). Scendendo ulteriormente nell'albero, i predittori surrogati per `d13C` e `Mass` sono rispettivamente `Mass` e `d13C`. Ciò è possibile poiché questi predittori non mancano contemporaneamente.
+\
+Se si inserisce all'interno del codice il nome dell'oggetto albero, R stampa l'output corrispondente a ciascun ramo. In questo modo R visualizza il criterio di divisione (ad esempio `CN < 8.7`), il numero di osservazioni in quel ramo, la devianza, la previsione complessiva per il ramo (`bobcat`, `gray_fox` o `coyote`) e la frazione di osservazioni in quel ramo che assumono valori di `bobcat`, `gray_fox` o `coyote`. I rami che portano ai nodi terminali sono indicati con asterischi.
+
+```{r}
+rpart_mod
+```
+
+# Metodi di imputazione
+Un altro approccio alla gestione dei valori mancanti consiste nell'imputarli. L'imputazione utilizza informazioni e relazioni tra i predittori non mancanti per fornire una stima per riempire il valore assente.
+
+## K-Nearest Neighbors
+
+Quando il training set è di dimensioni ridotte o moderate, *K-nearest neighbors* può essere un metodo rapido ed efficace per imputare valori mancanti. Questa procedura identifica un campione con uno o più valori assenti. Quindi identifica i K campioni più simili nei dati di addestramento che sono completi. Questo metodo viene utilizzato anche per effettuare delle regressioni non parametriche.
+\
+\
+In seguito viene utilizzato di nuovo il dataset *scat*.
+\
+\
+Per effettuare le analisi conviene evidenziare i valori mancanti, tramite una variabile binaria, delle colonne `diameter` e `mass`.
+
+```{r}
+#Dataset che contiene in più la colonna `was_missing` 
+scat_missing <- 
+  scat %>%
+  mutate(
+    was_missing = ifelse(is.na(Diameter)| is.na(Mass), "yes", "no"),
+    was_missing = factor(was_missing, levels = c("yes", "no"))
+  )
+
+head(scat_missing[,c("Species", "Diameter", "Mass", "was_missing")], n=15)
+```
+
+Si mostra l'applicazione dell'algoritmo *K-nearest neighbors* tramite l'inputazione dei *missing values* delle variabili `diameter` e `mass`, usando i valori delle altre variabili. La funzione `step_impute_knn()` del pacchetto `recipes` implementa il metodo usando come valore di default k=5. k è un parametro di tuning, al crescere del suo valore si ha meno flessibilità nel fitting, viceversa a valori bassi di k corrisponde più flessibilità. Al contrario della regressione non parametrica, il vicinato viene calcolato usando la **distanza di Gower** che permette di trattare dati quantitativi e qualitativi.
+
+```{r}
+imp_knn <- 
+  recipe(Species ~ ., data = scat) %>%
+  step_impute_knn(Diameter, Mass, 
+                  impute_with = 
+                    imp_vars(Month, Year, Site, Location, 
+                             Age, Number, Length, ropey,
+                             segmented, scrape)) %>%
+  prep(training = scat, retain = TRUE) %>%
+  juice(Diameter, Mass) %>% 
+  set_names(c("diam_imp", "mass_imp")) %>%
+  mutate(method = "5-Nearest Neighbors")
+
+scat_knn <- bind_cols(scat_missing, imp_knn)
+```
+
+## Bagged trees
+I modelli basati su alberi sono una scelta ragionevole per una tecnica di imputazione poiché un albero può essere costruito in presenza di altri dati mancanti. Inoltre, gli alberi hanno generalmente una buona precisione e non estrapolano valori oltre i limiti dei dati di addestramento. Un singolo albero è noto per produrre risultati che hanno una bassa distorsione ma un'alta varianza. Gli insiemi di alberi, tuttavia, forniscono un'alternativa a bassa varianza. Le *Random Forests* sono una di queste tecniche.
+\
+\
+In generale, è sempre utile trovare un *trade-off* tra distorsione e varianza. Un eccesso di varianza può portare all'*overfitting*, viceversa una distorsione molto elevata porta ad un modello più rigido.  
+\
+\
+Per diminuire il costo computazionale delle *Random Forests* una buona alternativa che ha un ingombro computazionale più piccolo è un *bagged tree*, che è costruito in modo simile a una foresta casuale. La differenza principale è che in un modello di questo tipo, tutti i predittori vengono valutati ad ogni divisione in ogni albero.
+\
+\
+Si utilizza quindi anche questo metodo per imputare i valori mancanti di `diameter` e `mass`. Per utilizzare un insieme di 50 *bagged trees* si usa la funzione `bagging()` del pacchetto `ipred`.
+
+```{r}
+set.seed(3453)
+
+diam_fit <- bagging(Diameter ~  ., data = scat[, -1],
+                    nbagg = 50, coob = TRUE) 
+#nbagg è il numero di alberi
+diam_res <- getModelInfo("treebag")[[1]]$oob(diam_fit)
+
+diam_res
+```
+
+Quando l'obiettivo è l'imputazione di `diameter`, l'RMSE stimato del modello è 4,16 con un R^2 del 13,6%.
+
+```{r}
+set.seed(3453)
+
+mass_fit <- bagging(Mass ~  ., data = scat[, -1],
+                    nbagg = 50, coob = TRUE)
+
+mass_res <- getModelInfo("treebag")[[1]]$oob(mass_fit)
+
+mass_res
+```
+
+Quando l'obiettivo è l'imputazione di `mass`, l'RMSE stimato del modello è 8,56 con un R^2 del 28,5%.
+\
+\
+Tuttavia, queste imputazioni dei *bagged models* producono risultati ragionevoli, rientrano nell'intervallo dei dati di addestramento e consentono di conservare i predittori per la modellazione (al contrario della cancellazione caso per caso).
+
+```{r}
+scat_bag <- 
+  scat_missing %>%
+  mutate(method = "Bagged Tree",
+         diam_imp = Diameter, mass_imp = Mass)
+
+scat_bag$diam_imp[is.na(scat_bag$Diameter)] <- 
+  predict(diam_fit, scat[is.na(scat$Diameter),])
+
+scat_bag$mass_imp[is.na(scat_bag$Mass)] <- 
+  predict(mass_fit, scat[is.na(scat$Mass),])
+
+imputed <- bind_rows(scat_knn, scat_bag)
+```
+
+L'immagine seguente mostra i valori imputati ottenuti con *K-nearest neighbors* a sinistra e con i *bagged trees* a destra. Nel primo caso i nuovi valori (in rosa) cadono per lo più intorno alla periferia di queste due dimensioni, ma sono all'interno della gamma dei campioni con dati completi. Nel secondo caso i valori imputati cadono principalmente nelle zone più dense.
+
+```{r}
+ggplot(imputed, aes(col = was_missing)) + 
+  geom_point(aes(x = diam_imp, y = mass_imp), alpha = .5, cex = 2) + 
+  geom_rug(data = imputed[is.na(imputed$Mass),], 
+           aes(x = Diameter), 
+           sides = "b",
+           lwd = 1) + 
+  geom_rug(data = imputed[is.na(imputed$Diameter),], 
+           aes(y = Mass), 
+           sides = "l",
+           lwd = 1) + 
+  theme(legend.position = "top") + 
+  xlab("Diameter") + ylab("Mass") + 
+  facet_wrap(~method)
+```
+
+## Linear Methods
+Quando un predittore completo mostra una forte relazione lineare con un predittore che richiede l’imputazione, un modello lineare semplice può essere l’approccio migliore. La regressione lineare può essere utilizzata per un predittore numerico che richiede l’imputazione. Allo stesso modo, la regressione logistica è appropriata per un predittore categorico che richiede l’imputazione.
+\
+\
+Per esempio, analizzando i dati sull’utenza dei treni di Chicago (usati anche in precedenza) si può notare come il ritardo di 14 giorni nell’utenza all’interno di una fermata è altamente correlato con l’utenza del giorno corrente.
+
+```{r}
+# Gestione delle date
+train_plot_data <- 
+  training %>% 
+  mutate(date = train_days)
+
+train_plot_data <- 
+  train_plot_data %>% 
+  mutate( #si inserisce una colonna con un'etichetta riguardo il tipo di giorno
+    #della settimana
+    pow = ifelse(dow %in% c("Sat", "Sun"), "Weekend", "Weekday"),
+    pow = factor(pow)
+  )
+
+#Festività
+set.seed(149334)
+
+commonHolidays <- 
+  c("USNewYearsDay", "Jan02_Mon_Fri", "USMLKingsBirthday", 
+    "USPresidentsDay", "USMemorialDay", "USIndependenceDay", 
+    "Jul03_Mon_Fri", "Jul05_Mon_Fri", "USLaborDay", "USThanksgivingDay", 
+    "Day_after_Thx", "ChristmasEve", "USChristmasDay", "Dec26_wkday", 
+    "Dec31_Mon_Fri")
+
+any_holiday <- #si inserisce una colonna che etichetta se il giorno è una
+  #festività o meno
+  train_plot_data %>% 
+  dplyr::select(date, !!commonHolidays) %>% 
+  gather(holiday, value, -date) %>% 
+  group_by(date) %>% 
+  summarize(common_holiday = max(value)) %>% 
+  ungroup() %>% 
+  mutate(common_holiday = ifelse(common_holiday == 1, "Holiday", "Non-holiday")) %>% 
+  inner_join(train_plot_data, by = "date")
+
+holiday_values <- 
+  any_holiday %>% 
+  dplyr::select(date, common_holiday)
+
+#funzione per calcolare il lag di due settimane rispetto ad una data
+make_lag <- function(x, lag = 14) {
+  x$date <- x$date + days(lag)
+  prefix <- ifelse(lag < 10, paste0("0", lag), lag)
+  prefix <- paste0("l", prefix, "_holiday")
+  names(x) <- gsub("common_holiday", prefix, names(x))
+  x
+}
+
+#Si laggano i dati di 14 giorni
+lag_hol <- make_lag(holiday_values, lag = 14)
+
+holiday_data <- #aggiunta della colonna al dataset totale con i valori delle
+  #festività dei giorni laggati
+  any_holiday %>% 
+  left_join(lag_hol, by = "date") %>% 
+  mutate(
+    year = factor(year),
+    l14_holiday = ifelse(is.na(l14_holiday), "Non-holiday", l14_holiday)
+  )
+```
+
+La figura seguente mostra la relazione tra questi predittori per la fermata di Clark/Lake. La maggior parte dei dati mostra una relazione lineare tra questi predittori, con una manciata di giorni che hanno valori lontani dalla tendenza generale. Ovviamente includere le vacanze come predittore nel modello robusto contribuirebbe a migliorare l’imputazione.
+
+```{r}
+holiday_data %>% 
+  dplyr::filter(common_holiday == "Non-holiday" & l14_holiday == "Non-holiday") %>% 
+  ggplot(aes(l14_40380, s_40380, col = pow)) +
+  geom_point(alpha=0.5) +
+  scale_color_manual(values = c("#D53E4F", "#3ed5c4")) +
+  xlab("14-Day Lag") +
+  ylab("Current Day") +
+  theme(legend.title=element_blank())+ 
+  coord_equal() + 
+  geom_abline(linetype = "dashed")
+```
+
+
+
