@@ -36,32 +36,11 @@ You can find the dataset used in the <a href="https://github.com/emanuelaelli/Te
 
 <a name="presentation"></a>
 ## &#9741; &nbsp; Presentation 
-You can find our presentation in the <a href="https://github.com/emanuelaelli/Text_Mining/blob/main/Report.pdf">Report</a> and <a href="https://github.com/emanuelaelli/Text_Mining/blob/main/Presentation.pdf">Slides</a> folder.<br>
+You can find our presentation in the <a href="https://github.com/emanuelaelli/High_Dimensional_Data_Analysis/blob/main/Elli_Fasani_Madon_Report.pdf">Report</a> and <a href="https://github.com/emanuelaelli/Text_Mining/blob/main/Presentation.pdf">Slides</a> folder.<br>
 
 
 <a name="aboutus"></a>
 ## &#9741; &nbsp; About us
-
-&#8860; &nbsp; **Tommaso Strada** 
-
-- *Current Studies*: Data Science M.Sc. Student at Università degli Studi di Milano-Bicocca (UniMiB);
-- *Background*: Bachelor degree in Economics and Business Administration at Università degli Studi di Milano-Bicocca (UniMiB).
-<br>
-
-<p align = "center">
-<a href = "https://linkedin.com/in/TommasoStrada"><img src="https://github.com/emanuelaelli/emanuelaelli/blob/main/Linkedin_logo.png" width = "2.3%"></a>
-  <a href = "https://github.com/TStrada"><img src="https://github.com/emanuelaelli/emanuelaelli/blob/main/GitHub_logo.png" width = "2.5%"></a>
-</p>
-
-&#8860; &nbsp; **Federica Madon**
-
-- *Current Studies*: Data Science M.Sc. Student at Università degli Studi di Milano-Bicocca (UniMiB);
-- *Background*: Bachelor degree in Mathematics at Università degli Studi di Milano-Bicocca (UniMiB). 
-<br>
-
-<p align = "center">
-  <a href = "https://github.com/f-madon"><img src="https://github.com/emanuelaelli/emanuelaelli/blob/main/GitHub_logo.png" width = "2.5%"></a>
-</p>
 
 &#8860; &nbsp; **Emanuela Elli**
 
@@ -75,5 +54,20 @@ You can find our presentation in the <a href="https://github.com/emanuelaelli/Te
 </p>
 
 <p align = "center">
+</p>
+
+&#8860; &nbsp; **Alessandro Fasani**
+
+- *Current Studies*: Data Science M.Sc. Student at Università degli Studi di Milano-Bicocca (UniMiB).
+<br>
+
+&#8860; &nbsp; **Federica Madon**
+
+- *Current Studies*: Data Science M.Sc. Student at Università degli Studi di Milano-Bicocca (UniMiB);
+- *Background*: Bachelor degree in Mathematics at Università degli Studi di Milano-Bicocca (UniMiB). 
+<br>
+
+<p align = "center">
+  <a href = "https://github.com/f-madon"><img src="https://github.com/emanuelaelli/emanuelaelli/blob/main/GitHub_logo.png" width = "2.5%"></a>
 </p>
 
