@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/emanuelaelli/High_Dimensional_Data_Analysis/blob/main/img.png" height="30">
+  <img src="https://github.com/emanuelaelli/High_Dimensional_Data_Analysis/blob/main/img.png" height="80">
 </p>
   <h6 align="center"> Handling Missing Data, a High Dimensional Data Analysis Project</h6>
 <p align="center">
